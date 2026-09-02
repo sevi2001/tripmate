@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../models/activity.dart';
 import '../../models/trip.dart';
+import 'add_activity_screen.dart';
 
-class TripDetailsScreen extends StatelessWidget {
+class TripDetailsScreen extends StatefulWidget {
   final Trip trip;
 
   const TripDetailsScreen({
@@ -12,7 +14,55 @@ class TripDetailsScreen extends StatelessWidget {
   });
 
   @override
+  State<TripDetailsScreen> createState() =>
+      _TripDetailsScreenState();
+}
+
+class _TripDetailsScreenState
+    extends State<TripDetailsScreen> {
+  final List<Activity> _activities = [
+    Activity(
+      title: 'Hotel Check-in',
+      location: 'Shinjuku',
+      time: '9:00 AM',
+      category: 'Hotel',
+      notes: '',
+    ),
+    Activity(
+      title: 'City Exploration',
+      location: 'Shibuya',
+      time: '11:00 AM',
+      category: 'Sightseeing',
+      notes: '',
+    ),
+    Activity(
+      title: 'Dinner',
+      location: 'Tokyo',
+      time: '6:30 PM',
+      category: 'Food',
+      notes: '',
+    ),
+  ];
+
+  Future<void> _addActivity() async {
+    final result = await Navigator.push<Activity>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddActivityScreen(),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _activities.add(result);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final trip = widget.trip;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -22,21 +72,13 @@ class TripDetailsScreen extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.more_vert_rounded,
-            ),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderCard(),
+            _buildHeaderCard(trip),
 
             const SizedBox(height: 26),
 
@@ -87,10 +129,8 @@ class TripDetailsScreen extends StatelessWidget {
                 ),
 
                 TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons.add,
-                  ),
+                  onPressed: _addActivity,
+                  icon: const Icon(Icons.add),
                   label: const Text('Add Activity'),
                 ),
               ],
@@ -98,22 +138,21 @@ class TripDetailsScreen extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            _buildActivity(
-              time: '09:00 AM',
-              title: 'Hotel Check-in',
-              icon: Icons.hotel_outlined,
-            ),
+            if (_activities.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(30),
+                  child: Text(
+                    'No activities added yet.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
 
-            _buildActivity(
-              time: '11:00 AM',
-              title: 'City Exploration',
-              icon: Icons.location_on_outlined,
-            ),
-
-            _buildActivity(
-              time: '06:30 PM',
-              title: 'Dinner',
-              icon: Icons.restaurant_outlined,
+            ..._activities.map(
+              (activity) => _buildActivity(activity),
             ),
           ],
         ),
@@ -121,7 +160,7 @@ class TripDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderCard() {
+  Widget _buildHeaderCard(Trip trip) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -131,8 +170,6 @@ class TripDetailsScreen extends StatelessWidget {
             AppColors.primary,
             AppColors.secondary,
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
       ),
@@ -144,9 +181,7 @@ class TripDetailsScreen extends StatelessWidget {
             color: Colors.white,
             size: 36,
           ),
-
           const SizedBox(height: 24),
-
           Text(
             '${trip.destination}, ${trip.country}',
             style: const TextStyle(
@@ -155,14 +190,11 @@ class TripDetailsScreen extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-
           const SizedBox(height: 8),
-
           Text(
             trip.status,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 15,
             ),
           ),
         ],
@@ -188,9 +220,7 @@ class TripDetailsScreen extends StatelessWidget {
             icon,
             color: AppColors.primary,
           ),
-
           const SizedBox(height: 12),
-
           Text(
             title,
             style: const TextStyle(
@@ -198,9 +228,7 @@ class TripDetailsScreen extends StatelessWidget {
               fontSize: 13,
             ),
           ),
-
           const SizedBox(height: 5),
-
           Text(
             value,
             style: const TextStyle(
@@ -213,11 +241,7 @@ class TripDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActivity({
-    required String time,
-    required String title,
-    required IconData icon,
-  }) {
+  Widget _buildActivity(Activity activity) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -231,12 +255,13 @@ class TripDetailsScreen extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color:
-                  AppColors.primary.withValues(alpha: 0.10),
+              color: AppColors.primary.withValues(
+                alpha: 0.10,
+              ),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(
-              icon,
+            child: const Icon(
+              Icons.location_on_outlined,
               color: AppColors.primary,
             ),
           ),
@@ -248,7 +273,7 @@ class TripDetailsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  time,
+                  activity.time,
                   style: const TextStyle(
                     color: AppColors.primary,
                     fontSize: 12,
@@ -259,20 +284,24 @@ class TripDetailsScreen extends StatelessWidget {
                 const SizedBox(height: 4),
 
                 Text(
-                  title,
+                  activity.title,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+
+                const SizedBox(height: 3),
+
+                Text(
+                  activity.location,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
-          ),
-
-          const Icon(
-            Icons.arrow_forward_ios_rounded,
-            size: 16,
-            color: AppColors.textSecondary,
           ),
         ],
       ),
