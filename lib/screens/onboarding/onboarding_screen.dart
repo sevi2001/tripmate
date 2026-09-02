@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../home/home_screen.dart';
+import '../auth/login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -43,18 +43,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      _goToHome();
+      _goToLogin();
     }
   }
-
-  void _goToHome() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const HomeScreen(),
-      ),
-    );
-  }
+void _goToLogin() {
+  Navigator.pushReplacement(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const LoginScreen(),
+    ),
+  );
+}
 
   @override
   void dispose() {
@@ -77,7 +76,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   right: 20,
                 ),
                 child: TextButton(
-                  onPressed: _goToHome,
+                  onPressed: _goToLogin,
                   child: const Text(
                     'Skip',
                     style: TextStyle(
