@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -21,6 +23,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -31,8 +34,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _register() {
-    if (_formKey.currentState!.validate()) {
+  Future<void> _register() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final UserCredential userCredential =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      final User? user = userCredential.user;
+
+      if (user == null) {
+        throw Exception('User account could not be created.');
+      }
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set({
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account created successfully'),
+        ),
+      );
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -40,6 +80,54 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         (route) => false,
       );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      String message = 'Registration failed. Please try again.';
+
+      if (e.code == 'email-already-in-use') {
+        message = 'This email is already registered.';
+      } else if (e.code == 'weak-password') {
+        message = 'Please choose a stronger password.';
+      } else if (e.code == 'invalid-email') {
+        message = 'Please enter a valid email address.';
+      } else if (e.code == 'operation-not-allowed') {
+        message = 'Email/password registration is not enabled.';
+      } else if (e.message != null) {
+        message = e.message!;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.message ?? 'Failed to save user data to Firestore.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Something went wrong. Please try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -59,9 +147,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 IconButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                        },
                   icon: const Icon(
                     Icons.arrow_back_ios_new_rounded,
                   ),
@@ -103,6 +193,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 TextFormField(
                   controller: _nameController,
+                  enabled: !_isLoading,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     hintText: 'Enter your full name',
@@ -137,6 +228,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 TextFormField(
                   controller: _emailController,
+                  enabled: !_isLoading,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     hintText: 'Enter your email',
@@ -149,7 +241,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       return 'Please enter your email';
                     }
 
-                    if (!value.contains('@')) {
+                    final email = value.trim();
+
+                    if (!email.contains('@') || !email.contains('.')) {
                       return 'Please enter a valid email';
                     }
 
@@ -171,6 +265,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 TextFormField(
                   controller: _passwordController,
+                  enabled: !_isLoading,
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
                     hintText: 'Create a password',
@@ -178,11 +273,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Icons.lock_outline_rounded,
                     ),
                     suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
                       icon: Icon(
                         _obscurePassword
                             ? Icons.visibility_off_outlined
@@ -217,6 +314,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 TextFormField(
                   controller: _confirmPasswordController,
+                  enabled: !_isLoading,
                   obscureText: _obscureConfirmPassword,
                   decoration: InputDecoration(
                     hintText: 'Confirm your password',
@@ -224,12 +322,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Icons.lock_reset_rounded,
                     ),
                     suffixIcon: IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _obscureConfirmPassword =
-                              !_obscureConfirmPassword;
-                        });
-                      },
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _obscureConfirmPassword =
+                                    !_obscureConfirmPassword;
+                              });
+                            },
                       icon: Icon(
                         _obscureConfirmPassword
                             ? Icons.visibility_off_outlined
@@ -255,14 +355,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _register,
-                    child: const Text(
-                      'Create Account',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    onPressed: _isLoading ? null : _register,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Create Account',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                   ),
                 ),
 
@@ -278,9 +387,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                            },
                       child: const Text(
                         'Sign In',
                         style: TextStyle(
