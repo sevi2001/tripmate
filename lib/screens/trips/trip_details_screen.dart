@@ -20,29 +20,7 @@ class TripDetailsScreen extends StatefulWidget {
 
 class _TripDetailsScreenState
     extends State<TripDetailsScreen> {
-  final List<Activity> _activities = [
-    Activity(
-      title: 'Hotel Check-in',
-      location: 'Shinjuku',
-      time: '9:00 AM',
-      category: 'Hotel',
-      notes: '',
-    ),
-    Activity(
-      title: 'City Exploration',
-      location: 'Shibuya',
-      time: '11:00 AM',
-      category: 'Sightseeing',
-      notes: '',
-    ),
-    Activity(
-      title: 'Dinner',
-      location: 'Tokyo',
-      time: '6:30 PM',
-      category: 'Food',
-      notes: '',
-    ),
-  ];
+  final List<Activity> _activities = [];
 
   Future<void> _addActivity() async {
     final result = await Navigator.push<Activity>(
@@ -57,6 +35,10 @@ class _TripDetailsScreenState
         _activities.add(result);
       });
     }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   @override
@@ -87,6 +69,7 @@ class _TripDetailsScreenState
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
               ),
             ),
 
@@ -98,7 +81,7 @@ class _TripDetailsScreenState
                   child: _overviewCard(
                     Icons.calendar_month_rounded,
                     'Dates',
-                    '${trip.startDate}\n${trip.endDate}',
+                    '${_formatDate(trip.startDate)}\n${_formatDate(trip.endDate)}',
                   ),
                 ),
 
@@ -108,30 +91,89 @@ class _TripDetailsScreenState
                   child: _overviewCard(
                     Icons.account_balance_wallet_outlined,
                     'Budget',
-                    trip.budget,
+                    'Rs. ${trip.budget.toStringAsFixed(0)}',
                   ),
                 ),
               ],
             ),
 
+            const SizedBox(height: 14),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _overviewCard(
+                    Icons.travel_explore_rounded,
+                    'Trip Type',
+                    trip.tripType.isEmpty
+                        ? 'Not specified'
+                        : trip.tripType,
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: _overviewCard(
+                    Icons.info_outline_rounded,
+                    'Status',
+                    trip.status,
+                  ),
+                ),
+              ],
+            ),
+
+            if (trip.notes.isNotEmpty) ...[
+              const SizedBox(height: 28),
+
+              const Text(
+                'Notes',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  trip.notes,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ],
+
             const SizedBox(height: 30),
 
             Row(
-              mainAxisAlignment:
-                  MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
                   'Itinerary',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
                   ),
                 ),
 
                 TextButton.icon(
                   onPressed: _addActivity,
                   icon: const Icon(Icons.add),
-                  label: const Text('Add Activity'),
+                  label: const Text(
+                    'Add Activity',
+                  ),
                 ),
               ],
             ),
@@ -139,15 +181,36 @@ class _TripDetailsScreenState
             const SizedBox(height: 12),
 
             if (_activities.isEmpty)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(30),
-                  child: Text(
-                    'No activities added yet.',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Column(
+                  children: [
+                    Icon(
+                      Icons.event_note_outlined,
+                      size: 44,
+                      color: AppColors.primary,
                     ),
-                  ),
+                    SizedBox(height: 10),
+                    Text(
+                      'No activities added yet',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Add activities to build your itinerary.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -170,6 +233,8 @@ class _TripDetailsScreenState
             AppColors.primary,
             AppColors.secondary,
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
       ),
@@ -181,7 +246,9 @@ class _TripDetailsScreenState
             color: Colors.white,
             size: 36,
           ),
+
           const SizedBox(height: 24),
+
           Text(
             '${trip.destination}, ${trip.country}',
             style: const TextStyle(
@@ -190,11 +257,14 @@ class _TripDetailsScreenState
               fontWeight: FontWeight.bold,
             ),
           ),
+
           const SizedBox(height: 8),
+
           Text(
             trip.status,
             style: const TextStyle(
               color: Colors.white70,
+              fontSize: 15,
             ),
           ),
         ],
@@ -220,7 +290,9 @@ class _TripDetailsScreenState
             icon,
             color: AppColors.primary,
           ),
+
           const SizedBox(height: 12),
+
           Text(
             title,
             style: const TextStyle(
@@ -228,7 +300,9 @@ class _TripDetailsScreenState
               fontSize: 13,
             ),
           ),
+
           const SizedBox(height: 5),
+
           Text(
             value,
             style: const TextStyle(
