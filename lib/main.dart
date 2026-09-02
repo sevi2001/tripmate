@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'screens/home/home_screen.dart';
+import 'core/theme/app_theme.dart';
+import 'screens/splash/splash_screen.dart';
 
 void main() {
   runApp(const TripMateApp());
@@ -13,10 +14,8 @@ class TripMateApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'TripMate',
-      theme: ThemeData(
-        useMaterial3: true,
-      ),
-      home: const HomeScreen(),
+      theme: AppTheme.lightTheme,
+      home: const SplashScreen(),
     );
   }
 }
