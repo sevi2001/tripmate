@@ -1,76 +1,145 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/utils/trip_image_helper.dart';
+import '../../models/trip.dart';
+import '../trips/trip_details_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Please log in to view your trips.'),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            20,
-            20,
-            20,
-            30,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('trips')
+              .where('userId', isEqualTo: user.uid)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
 
-              const SizedBox(height: 28),
-
-              _buildUpcomingTrip(),
-
-              const SizedBox(height: 30),
-
-              const Text(
-                'Quick Actions',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    'Unable to load your trips.\n${snapshot.error}',
+                    textAlign: TextAlign.center,
+                  ),
                 ),
+              );
+            }
+
+            final List<Trip> trips = snapshot.data?.docs
+                    .map((document) => Trip.fromFirestore(document))
+                    .toList() ??
+                <Trip>[];
+
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+
+            final upcomingTrips = trips.where((trip) {
+              return !trip.endDate.isBefore(today);
+            }).toList();
+
+            upcomingTrips.sort(
+              (a, b) => a.startDate.compareTo(b.startDate),
+            );
+
+            final Trip? nextTrip =
+                upcomingTrips.isEmpty ? null : upcomingTrips.first;
+
+            final countryCount = trips
+                .map((trip) => trip.country.trim().toLowerCase())
+                .where((country) => country.isNotEmpty)
+                .toSet()
+                .length;
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+
+                  const SizedBox(height: 28),
+
+                  _buildUpcomingTrip(context, nextTrip),
+
+                  const SizedBox(height: 30),
+
+                  const Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  _buildQuickActions(),
+
+                  const SizedBox(height: 30),
+
+                  const Text(
+                    'Travel Overview',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  _buildStats(
+                    tripCount: trips.length,
+                    countryCount: countryCount,
+                    upcomingCount: upcomingTrips.length,
+                  ),
+                ],
               ),
-
-              const SizedBox(height: 16),
-
-              _buildQuickActions(),
-
-              const SizedBox(height: 30),
-
-              const Text(
-                'Travel Overview',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              _buildStats(),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
+  // --------------------------------------------------
+  // HEADER
+  // --------------------------------------------------
+
   Widget _buildHeader() {
     return Row(
       children: [
-        Expanded(
+        const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
-                'Good afternoon 👋',
+                'Welcome back 👋',
                 style: TextStyle(
                   fontSize: 15,
                   color: AppColors.textSecondary,
@@ -88,7 +157,9 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
         ),
+
         const SizedBox(width: 16),
+
         Container(
           width: 48,
           height: 48,
@@ -105,87 +176,220 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildUpcomingTrip() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            AppColors.primary,
-            AppColors.secondary,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+  // --------------------------------------------------
+  // UPCOMING TRIP — ORIGINAL GRADIENT + DESTINATION PHOTO
+  // --------------------------------------------------
+
+  Widget _buildUpcomingTrip(
+    BuildContext context,
+    Trip? trip,
+  ) {
+    if (trip == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
         ),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.flight_takeoff_rounded,
-                color: Colors.white,
+        child: const Column(
+          children: [
+            Icon(
+              Icons.flight_takeoff_rounded,
+              size: 46,
+              color: AppColors.primary,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'No upcoming trips yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
               ),
-              SizedBox(width: 8),
-              Text(
-                'Upcoming Trip',
-                style: TextStyle(
-                  color: Colors.white70,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Plan your next adventure to see it here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final duration = trip.endDate.difference(trip.startDate).inDays + 1;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TripDetailsScreen(trip: trip),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [
+              AppColors.primary,
+              AppColors.secondary,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ORIGINAL HEADER
+            const Row(
+              children: [
+                Icon(
+                  Icons.flight_takeoff_rounded,
+                  color: Colors.white,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  'Upcoming Trip',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+           // DESTINATION IMAGE WITH ERROR DIAGNOSTICS
+// LARGE RESPONSIVE DESTINATION IMAGE
+ClipRRect(
+  borderRadius: BorderRadius.circular(18),
+  child: AspectRatio(
+    aspectRatio: 16 / 9,
+    child: Image.asset(
+      TripImageHelper.getImage(trip.destination),
+      width: double.infinity,
+      height: double.infinity,
+      fit: BoxFit.cover,
+      alignment: Alignment.center,
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('IMAGE ERROR: $error');
+
+        return Container(
+          color: Colors.white24,
+          child: const Center(
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              size: 54,
+              color: Colors.white,
+            ),
+          ),
+        );
+      },
+    ),
+  ),
+),
+
+            // ACTUAL DESTINATION FROM FIRESTORE
+            Text(
+              '${trip.destination}, ${trip.country}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // ACTUAL DATES FROM FIRESTORE
+            Text(
+              '${_formatDate(trip.startDate)} - '
+              '${_formatDate(trip.endDate)}',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 15,
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // TRIP TYPE
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                trip.tripType,
+                style: const TextStyle(
+                  color: Colors.white,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          const Text(
-            'Tokyo, Japan',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
             ),
-          ),
 
-          const SizedBox(height: 8),
+            const SizedBox(height: 24),
 
-          const Text(
-            '12 Dec - 18 Dec 2026',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 15,
+            // ORIGINAL INFORMATION ROW
+            Row(
+              children: [
+                Expanded(
+                  child: _tripInfo(
+                    Icons.calendar_month_rounded,
+                    '$duration Days',
+                  ),
+                ),
+                Expanded(
+                  child: _tripInfo(
+                    Icons.payments_outlined,
+                    'Rs. ${trip.budget.toStringAsFixed(0)}',
+                  ),
+                ),
+                Expanded(
+                  child: _tripInfo(
+                    Icons.place_outlined,
+                    trip.country,
+                  ),
+                ),
+              ],
             ),
-          ),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-          Row(
-            children: [
-              Expanded(
-                child: _tripInfo(
-                  Icons.calendar_month_rounded,
-                  '6 Days',
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  'View Trip Details',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _tripInfo(
-                  Icons.payments_outlined,
-                  'Rs. 120K',
+                SizedBox(width: 6),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  color: Colors.white,
                 ),
-              ),
-              Expanded(
-                child: _tripInfo(
-                  Icons.place_outlined,
-                  '12 Places',
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -201,17 +405,34 @@ class HomeScreen extends StatelessWidget {
           color: Colors.white,
           size: 22,
         ),
+
         const SizedBox(height: 6),
+
         Text(
           value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w600,
+            fontSize: 12,
           ),
         ),
       ],
     );
   }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+
+    return '$day/$month/${date.year}';
+  }
+
+  // --------------------------------------------------
+  // QUICK ACTIONS — ORIGINAL DESIGN
+  // --------------------------------------------------
 
   Widget _buildQuickActions() {
     return Row(
@@ -294,30 +515,42 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStats() {
+  // --------------------------------------------------
+  // TRAVEL OVERVIEW — ORIGINAL DESIGN, REAL COUNTS
+  // --------------------------------------------------
+
+  Widget _buildStats({
+    required int tripCount,
+    required int countryCount,
+    required int upcomingCount,
+  }) {
     return Row(
       children: [
         Expanded(
           child: _statCard(
             icon: Icons.flight_rounded,
-            value: '8',
+            value: '$tripCount',
             label: 'Trips',
           ),
         ),
+
         const SizedBox(width: 12),
+
         Expanded(
           child: _statCard(
             icon: Icons.public_rounded,
-            value: '5',
+            value: '$countryCount',
             label: 'Countries',
           ),
         ),
+
         const SizedBox(width: 12),
+
         Expanded(
           child: _statCard(
-            icon: Icons.place_rounded,
-            value: '34',
-            label: 'Places',
+            icon: Icons.calendar_month_rounded,
+            value: '$upcomingCount',
+            label: 'Upcoming',
           ),
         ),
       ],
