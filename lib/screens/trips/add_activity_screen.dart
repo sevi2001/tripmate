@@ -1,10 +1,15 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../models/activity.dart';
 
 class AddActivityScreen extends StatefulWidget {
-  const AddActivityScreen({super.key});
+  final String tripId;
+
+  const AddActivityScreen({
+    super.key,
+    required this.tripId,
+  });
 
   @override
   State<AddActivityScreen> createState() =>
@@ -21,6 +26,8 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
   TimeOfDay? _selectedTime;
 
   String _category = 'Sightseeing';
+
+  bool _isLoading = false;
 
   final List<String> _categories = [
     'Sightseeing',
@@ -53,7 +60,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
     }
   }
 
-  void _saveActivity() {
+  Future<void> _saveActivity() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -64,22 +71,53 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
           content: Text('Please select a time'),
         ),
       );
-
       return;
     }
 
-    final activity = Activity(
-      title: _titleController.text.trim(),
-      location: _locationController.text.trim(),
-      time: _selectedTime!.format(context),
-      category: _category,
-      notes: _notesController.text.trim(),
-    );
+    setState(() {
+      _isLoading = true;
+    });
 
-    Navigator.pop(
-      context,
-      activity,
-    );
+    try {
+      await FirebaseFirestore.instance
+          .collection('trips')
+          .doc(widget.tripId)
+          .collection('activities')
+          .add({
+        'title': _titleController.text.trim(),
+        'location': _locationController.text.trim(),
+        'time': _selectedTime!.format(context),
+        'category': _category,
+        'notes': _notesController.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Activity added successfully'),
+        ),
+      );
+
+      Navigator.pop(context);
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.message ?? 'Failed to add activity.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -112,6 +150,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
 
               TextFormField(
                 controller: _titleController,
+                enabled: !_isLoading,
                 decoration: const InputDecoration(
                   hintText: 'Example: Visit Tokyo Tower',
                   prefixIcon: Icon(
@@ -140,6 +179,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
 
               TextFormField(
                 controller: _locationController,
+                enabled: !_isLoading,
                 decoration: const InputDecoration(
                   hintText: 'Example: Minato City',
                   prefixIcon: Icon(
@@ -167,7 +207,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
               const SizedBox(height: 8),
 
               InkWell(
-                onTap: _selectTime,
+                onTap: _isLoading ? null : _selectTime,
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   width: double.infinity,
@@ -187,11 +227,6 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
                         _selectedTime == null
                             ? 'Select time'
                             : _selectedTime!.format(context),
-                        style: TextStyle(
-                          color: _selectedTime == null
-                              ? AppColors.textSecondary
-                              : AppColors.textPrimary,
-                        ),
                       ),
                     ],
                   ),
@@ -211,26 +246,21 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
 
               DropdownButtonFormField<String>(
                 initialValue: _category,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(
-                    Icons.category_outlined,
-                  ),
-                ),
-                items: _categories.map(
-                  (category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(category),
-                    );
-                  },
-                ).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _category = value;
-                    });
-                  }
-                },
+                items: _categories.map((category) {
+                  return DropdownMenuItem(
+                    value: category,
+                    child: Text(category),
+                  );
+                }).toList(),
+                onChanged: _isLoading
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          setState(() {
+                            _category = value;
+                          });
+                        }
+                      },
               ),
 
               const SizedBox(height: 20),
@@ -246,6 +276,7 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
 
               TextFormField(
                 controller: _notesController,
+                enabled: !_isLoading,
                 maxLines: 4,
                 decoration: const InputDecoration(
                   hintText: 'Optional notes...',
@@ -257,16 +288,23 @@ class _AddActivityScreenState extends State<AddActivityScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _saveActivity,
-                  icon: const Icon(
-                    Icons.add_task_rounded,
-                  ),
-                  label: const Text(
-                    'Add Activity',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  onPressed: _isLoading ? null : _saveActivity,
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.add_task_rounded,
+                        ),
+                  label: Text(
+                    _isLoading
+                        ? 'Adding...'
+                        : 'Add Activity',
                   ),
                 ),
               ),

@@ -44,7 +44,8 @@ class _MainNavigationScreenState
         selectedIndex: _currentIndex,
         onDestinationSelected: _changePage,
         backgroundColor: Colors.white,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.12),
+        indicatorColor:
+            AppColors.primary.withValues(alpha: 0.12),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -62,7 +63,9 @@ class _MainNavigationScreenState
             label: 'Plan',
           ),
           NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
+            icon: Icon(
+              Icons.account_balance_wallet_outlined,
+            ),
             selectedIcon: Icon(
               Icons.account_balance_wallet_rounded,
             ),

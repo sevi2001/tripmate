@@ -1,11 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/activity.dart';
 import '../../models/trip.dart';
 import 'add_activity_screen.dart';
+import '../expenses/trip_expenses_screen.dart';
 
-class TripDetailsScreen extends StatefulWidget {
+class TripDetailsScreen extends StatelessWidget {
   final Trip trip;
 
   const TripDetailsScreen({
@@ -13,38 +15,24 @@ class TripDetailsScreen extends StatefulWidget {
     required this.trip,
   });
 
-  @override
-  State<TripDetailsScreen> createState() =>
-      _TripDetailsScreenState();
-}
-
-class _TripDetailsScreenState
-    extends State<TripDetailsScreen> {
-  final List<Activity> _activities = [];
-
-  Future<void> _addActivity() async {
-    final result = await Navigator.push<Activity>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AddActivityScreen(),
-      ),
-    );
-
-    if (result != null) {
-      setState(() {
-        _activities.add(result);
-      });
-    }
-  }
-
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
   }
 
+  Stream<QuerySnapshot<Map<String, dynamic>>> _activityStream() {
+    return FirebaseFirestore.instance
+        .collection('trips')
+        .doc(trip.id)
+        .collection('activities')
+        .orderBy(
+          'createdAt',
+          descending: false,
+        )
+        .snapshots();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final trip = widget.trip;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -60,7 +48,7 @@ class _TripDetailsScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderCard(trip),
+            _buildHeaderCard(),
 
             const SizedBox(height: 26),
 
@@ -69,7 +57,6 @@ class _TripDetailsScreenState
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
               ),
             ),
 
@@ -97,64 +84,29 @@ class _TripDetailsScreenState
               ],
             ),
 
-            const SizedBox(height: 14),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _overviewCard(
-                    Icons.travel_explore_rounded,
-                    'Trip Type',
-                    trip.tripType.isEmpty
-                        ? 'Not specified'
-                        : trip.tripType,
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                Expanded(
-                  child: _overviewCard(
-                    Icons.info_outline_rounded,
-                    'Status',
-                    trip.status,
-                  ),
-                ),
-              ],
-            ),
-
-            if (trip.notes.isNotEmpty) ...[
-              const SizedBox(height: 28),
-
-              const Text(
-                'Notes',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  trip.notes,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-            ],
-
             const SizedBox(height: 30),
+
+            SizedBox(
+  width: double.infinity,
+  child: ElevatedButton.icon(
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TripExpensesScreen(
+            trip: trip,
+          ),
+        ),
+      );
+    },
+    icon: const Icon(
+      Icons.account_balance_wallet_outlined,
+    ),
+    label: const Text(
+      'View Trip Expenses',
+    ),
+  ),
+),
 
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -164,58 +116,97 @@ class _TripDetailsScreenState
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
                   ),
                 ),
 
                 TextButton.icon(
-                  onPressed: _addActivity,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AddActivityScreen(
+                          tripId: trip.id,
+                        ),
+                      ),
+                    );
+                  },
                   icon: const Icon(Icons.add),
-                  label: const Text(
-                    'Add Activity',
-                  ),
+                  label: const Text('Add Activity'),
                 ),
               ],
             ),
 
             const SizedBox(height: 12),
 
-            if (_activities.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(
-                      Icons.event_note_outlined,
-                      size: 44,
-                      color: AppColors.primary,
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _activityStream(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(30),
+                      child: CircularProgressIndicator(),
                     ),
-                    SizedBox(height: 10),
-                    Text(
-                      'No activities added yet',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Add activities to build your itinerary.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  );
+                }
 
-            ..._activities.map(
-              (activity) => _buildActivity(activity),
+                if (snapshot.hasError) {
+                  return Text(
+                    'Failed to load activities.\n${snapshot.error}',
+                  );
+                }
+
+                final docs = snapshot.data?.docs ?? [];
+
+                if (docs.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Column(
+                      children: [
+                        Icon(
+                          Icons.event_note_outlined,
+                          size: 44,
+                          color: AppColors.primary,
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          'No activities added yet',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final activities = docs.map((doc) {
+                  final data = doc.data();
+
+                  return Activity(
+                    id: doc.id,
+                    title: data['title']?.toString() ?? '',
+                    location: data['location']?.toString() ?? '',
+                    time: data['time']?.toString() ?? '',
+                    category: data['category']?.toString() ?? '',
+                    notes: data['notes']?.toString() ?? '',
+                  );
+                }).toList();
+
+                return Column(
+                  children: activities
+                      .map(
+                        (activity) => _buildActivity(activity),
+                      )
+                      .toList(),
+                );
+              },
             ),
           ],
         ),
@@ -223,7 +214,7 @@ class _TripDetailsScreenState
     );
   }
 
-  Widget _buildHeaderCard(Trip trip) {
+  Widget _buildHeaderCard() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -233,8 +224,6 @@ class _TripDetailsScreenState
             AppColors.primary,
             AppColors.secondary,
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
       ),
@@ -246,9 +235,7 @@ class _TripDetailsScreenState
             color: Colors.white,
             size: 36,
           ),
-
           const SizedBox(height: 24),
-
           Text(
             '${trip.destination}, ${trip.country}',
             style: const TextStyle(
@@ -257,14 +244,11 @@ class _TripDetailsScreenState
               fontWeight: FontWeight.bold,
             ),
           ),
-
           const SizedBox(height: 8),
-
           Text(
             trip.status,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 15,
             ),
           ),
         ],
@@ -290,9 +274,7 @@ class _TripDetailsScreenState
             icon,
             color: AppColors.primary,
           ),
-
           const SizedBox(height: 12),
-
           Text(
             title,
             style: const TextStyle(
@@ -300,9 +282,7 @@ class _TripDetailsScreenState
               fontSize: 13,
             ),
           ),
-
           const SizedBox(height: 5),
-
           Text(
             value,
             style: const TextStyle(
@@ -374,6 +354,17 @@ class _TripDetailsScreenState
                     fontSize: 13,
                   ),
                 ),
+
+                if (activity.category.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    activity.category,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
